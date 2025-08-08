@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Object Detection with Voice</title>
+  <meta charset="UTF-8" />
+  <title>Voice Object Detector</title>
   <style>
     body {
       background-color: #111;
       color: white;
-      font-family: sans-serif;
+      font-family: Arial, sans-serif;
       text-align: center;
       margin: 0;
       padding: 20px;
@@ -19,85 +19,56 @@
       border-radius: 12px;
     }
     #start-btn {
-      padding: 12px 24px;
+      padding: 14px 28px;
       font-size: 18px;
-      background: #00aa88;
+      background-color: #00aa88;
       color: white;
       border: none;
       border-radius: 8px;
-      margin-top: 40px;
+      margin-top: 30px;
       cursor: pointer;
     }
     #status {
-      font-size: 20px;
-      margin-top: 10px;
+      font-size: 18px;
+      margin-top: 12px;
     }
   </style>
 </head>
 <body>
-  <h2>🧠 Object Detector with Voice</h2>
+  <h2>🧠 Object Detector with Voice (utter)</h2>
   <button id="start-btn">Start Detection</button>
   <video id="video" autoplay muted playsinline hidden></video>
-  <p id="status">Click the button to start.</p>
+  <p id="status">Click the button to begin</p>
 
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
   <script>
-    let model, lastSpoken = '', speaking = false;
-    let selectedVoice = null;
-
-    const btn = document.getElementById("start-btn");
-    const video = document.getElementById("video");
-    const statusText = document.getElementById("status");
+    let model;
+    let lastSpoken = '';
+    let isSpeaking = false;
     const synth = window.speechSynthesis;
 
-    // Wait for voices to be loaded
-    function loadVoices() {
-      return new Promise(resolve => {
-        let voices = synth.getVoices();
-        if (voices.length !== 0) {
-          resolve(voices);
-        } else {
-          synth.onvoiceschanged = () => {
-            voices = synth.getVoices();
-            resolve(voices);
-          };
-        }
-      });
-    }
+    const startBtn = document.getElementById("start-btn");
+    const video = document.getElementById("video");
+    const statusText = document.getElementById("status");
 
-    async function initSpeech() {
-      const voices = await loadVoices();
-      selectedVoice = voices.find(v => v.lang.startsWith('en')) || voices[0];
-      console.log("Voice loaded:", selectedVoice.name);
-    }
-
-    btn.onclick = async () => {
-      btn.disabled = true;
-      await initSpeech();
-      statusText.textContent = "Loading model...";
+    startBtn.onclick = async () => {
+      startBtn.style.display = 'none';
+      statusText.innerText = "Loading model...";
       model = await cocoSsd.load();
-      statusText.textContent = "Model loaded. Starting camera...";
+      statusText.innerText = "Model loaded. Starting camera...";
 
-      // Get back camera if possible
-      const constraints = {
-        video: {
-          facingMode: { exact: "environment" }
-        }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { exact: "environment" } }
+      });
+
+      video.srcObject = stream;
+      video.hidden = false;
+
+      video.onloadeddata = () => {
+        statusText.innerText = "Detecting...";
+        detectFrame();
       };
-
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        video.srcObject = stream;
-        video.hidden = false;
-
-        video.onloadeddata = () => {
-          statusText.textContent = "Detecting objects...";
-          detectFrame();
-        };
-      } catch (err) {
-        alert("Failed to access camera: " + err.message);
-      }
     };
 
     async function detectFrame() {
@@ -105,38 +76,36 @@
 
       if (predictions.length > 0) {
         const label = predictions[0].class;
-        statusText.textContent = `Detected: ${label}`;
+        statusText.innerText = "Detected: " + label;
 
-        if (label !== lastSpoken && !speaking) {
+        if (label !== lastSpoken && !isSpeaking) {
           lastSpoken = label;
-          speak(label);
+          speakWithUtter(label);
         }
       } else {
-        statusText.textContent = "No object detected";
+        statusText.innerText = "No object detected";
       }
 
       requestAnimationFrame(detectFrame);
     }
 
-    function speak(text) {
-      if (synth.speaking) {
-        console.warn("Still speaking. Skipping.");
-        return;
-      }
-
-      speaking = true;
-
+    function speakWithUtter(text) {
       const utter = new SpeechSynthesisUtterance(text);
-      utter.voice = selectedVoice;
-      utter.lang = selectedVoice.lang || "en-US";
+      utter.lang = 'en-US';
       utter.pitch = 1;
       utter.rate = 1;
 
-      utter.onend = () => {
-        speaking = false;
+      utter.onstart = () => {
+        isSpeaking = true;
+        console.log("Speaking:", text);
       };
 
-      console.log("Speaking:", text);
+      utter.onend = () => {
+        isSpeaking = false;
+        console.log("Done speaking:", text);
+      };
+
+      synth.cancel(); // Stop previous speech
       synth.speak(utter);
     }
   </script>
