@@ -3,66 +3,80 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Vision Assistant for Visually Impaired</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <title>Vision Assistant (Real Detection)</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
   <style>
-    .detection-box {
-      position: absolute;
-      border: 3px solid #3B82F6;
-      background-color: rgba(59, 130, 246, 0.2);
-      border-radius: 4px;
-      display: flex;
-      justify-content: center;
-      align-items: flex-end;
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      background: #f3f4f6;
+      padding: 20px;
     }
-    .detection-label {
-      background-color: #3B82F6;
-      color: white;
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-size: 12px;
-      margin-bottom: 4px;
+    video {
+      width: 100%;
+      max-width: 500px;
+      border-radius: 12px;
+    }
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+    #log {
+      margin-top: 20px;
+      font-size: 18px;
+      color: #111827;
+    }
+    #container {
+      position: relative;
+      display: inline-block;
     }
   </style>
 </head>
+<body>
+  <h1>🎯 Vision Assistant</h1>
+  <p>Real-time object detection + voice for the visually impaired</p>
 
-<body class="bg-gray-100 min-h-screen flex flex-col items-center justify-center px-4">
-  <header class="text-center mb-6">
-    <h1 class="text-4xl font-bold text-blue-700">Vision Assistant</h1>
-    <p class="text-gray-600 mt-2">Empowering visually impaired users with object recognition and voice feedback</p>
-  </header>
+  <div id="container">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas"></canvas>
+  </div>
 
-  <main class="w-full max-w-4xl bg-white rounded-lg shadow-lg p-6">
-    <div class="relative w-full h-64 bg-gray-200 rounded-lg overflow-hidden mb-4 flex items-center justify-center">
-      <img id="demo-image" src="https://placehold.co/600x400?text=Camera+Feed" alt="Camera feed" class="object-cover w-full h-full">
-      <div id="detections"></div>
-    </div>
-
-    <div class="flex justify-center gap-4 mb-6">
-      <button id="start-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded transition">Start Detection</button>
-      <button id="speak-btn" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded transition">Speak Findings</button>
-    </div>
-
-    <div class="bg-gray-50 p-4 rounded shadow-inner">
-      <h2 class="text-lg font-semibold text-gray-700 mb-2">Detection Log</h2>
-      <ul id="log-container" class="text-sm text-gray-600 space-y-1 max-h-40 overflow-y-auto"></ul>
-    </div>
-  </main>
+  <p id="log">Loading model...</p>
 
   <script>
-    const logContainer = document.getElementById('log-container');
-    const speakBtn = document.getElementById('speak-btn');
-    const startBtn = document.getElementById('start-btn');
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    const log = document.getElementById("log");
+    let model;
+    let lastSpoken = "";
 
-    let detectedObjects = [];
+    // Load COCO-SSD model
+    cocoSsd.load().then(loadedModel => {
+      model = loadedModel;
+      log.textContent = "Model loaded. Starting camera...";
+      startCamera();
+    });
 
-    // Simulated Detection
-    const mockObjects = ['person', 'dog', 'car', 'bicycle', 'chair', 'tree'];
-
-    function log(message) {
-      const item = document.createElement('li');
-      item.textContent = message;
-      logContainer.appendChild(item);
+    function startCamera() {
+      navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { exact: "environment" } // Back camera
+        },
+        audio: false
+      }).then(stream => {
+        video.srcObject = stream;
+        video.onloadedmetadata = () => {
+          video.play();
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          detectFrame();
+        };
+      }).catch(err => {
+        log.textContent = "Camera access error: " + err;
+      });
     }
 
     function speak(text) {
@@ -70,41 +84,45 @@
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = 'en-US';
         utterance.rate = 1;
-        utterance.pitch = 1;
         speechSynthesis.speak(utterance);
-      } else {
-        alert("Speech synthesis not supported in your browser.");
       }
     }
 
-    // Start Detection (simulate)
-    startBtn.addEventListener('click', () => {
-      log("Starting object detection...");
+    function detectFrame() {
+      model.detect(video).then(predictions => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const detectedLabels = [];
 
-      // Simulate detected objects
-      detectedObjects = [];
-      const num = Math.floor(Math.random() * 4) + 2; // 2 to 5 objects
-      for (let i = 0; i < num; i++) {
-        const obj = mockObjects[Math.floor(Math.random() * mockObjects.length)];
-        if (!detectedObjects.includes(obj)) {
-          detectedObjects.push(obj);
-          log(`Detected: ${obj}`);
+        predictions.forEach(prediction => {
+          const [x, y, width, height] = prediction.bbox;
+          const label = prediction.class;
+
+          // Draw box
+          ctx.strokeStyle = "#00FF00";
+          ctx.lineWidth = 2;
+          ctx.strokeRect(x, y, width, height);
+
+          // Draw label
+          ctx.fillStyle = "#00FF00";
+          ctx.font = "16px Arial";
+          ctx.fillText(label, x, y > 10 ? y - 5 : 10);
+
+          detectedLabels.push(label);
+        });
+
+        // Speak only if new object is detected
+        const uniqueObjects = [...new Set(detectedLabels)];
+        const currentLabel = uniqueObjects.join(', ');
+
+        if (currentLabel && currentLabel !== lastSpoken) {
+          lastSpoken = currentLabel;
+          speak(`I see ${currentLabel}`);
+          log.textContent = `Detected: ${currentLabel}`;
         }
-      }
 
-      speak("Objects detected. Click Speak Findings to hear them.");
-    });
-
-    // Speak Detected Objects
-    speakBtn.addEventListener('click', () => {
-      if (detectedObjects.length === 0) {
-        speak("No objects detected yet. Please click Start Detection.");
-        return;
-      }
-
-      const message = `I see: ${detectedObjects.join(', ')}`;
-      speak(message);
-    });
+        requestAnimationFrame(detectFrame);
+      });
+    }
   </script>
 </body>
 </html>
