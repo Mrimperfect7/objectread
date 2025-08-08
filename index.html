@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Object Detection with Voice</title>
+  <style>
+    body {
+      margin: 0;
+      background-color: #111;
+      color: white;
+      font-family: Arial, sans-serif;
+      text-align: center;
+    }
+    video, canvas {
+      width: 100%;
+      max-width: 600px;
+      border-radius: 10px;
+    }
+    #status {
+      margin-top: 10px;
+      font-size: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h2>Smart Object Detector with Voice</h2>
+  <video id="webcam" autoplay muted playsinline></video>
+  <canvas id="canvas" hidden></canvas>
+  <p id="status">Loading model...</p>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.13.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+  <script>
+    let model;
+    let spokenLabel = '';
+    let synth = window.speechSynthesis;
+
+    const video = document.getElementById('webcam');
+    const statusText = document.getElementById('status');
+
+    async function init() {
+      model = await cocoSsd.load();
+      statusText.innerText = "Model loaded. Starting camera...";
+
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      video.srcObject = stream;
+
+      video.addEventListener('loadeddata', () => {
+        statusText.innerText = "Detecting objects...";
+        detectFrame();
+      });
+    }
+
+    async function detectFrame() {
+      const predictions = await model.detect(video);
+
+      if (predictions.length > 0) {
+        const label = predictions[0].class;
+        statusText.innerText = `Detected: ${label}`;
+
+        // Speak only if the object has changed
+        if (label !== spokenLabel) {
+          speak(label);
+          spokenLabel = label;
+        }
+      } else {
+        statusText.innerText = "No object detected";
+      }
+
+      requestAnimationFrame(detectFrame);
+    }
+
+    function speak(text) {
+      if (!synth.speaking) {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'en-US';
+        synth.speak(utterance);
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
