@@ -44,28 +44,60 @@
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
   <script>
     let model, lastSpoken = '', speaking = false;
+    let selectedVoice = null;
 
     const btn = document.getElementById("start-btn");
     const video = document.getElementById("video");
     const statusText = document.getElementById("status");
-
     const synth = window.speechSynthesis;
+
+    // Wait for voices to be loaded
+    function loadVoices() {
+      return new Promise(resolve => {
+        let voices = synth.getVoices();
+        if (voices.length !== 0) {
+          resolve(voices);
+        } else {
+          synth.onvoiceschanged = () => {
+            voices = synth.getVoices();
+            resolve(voices);
+          };
+        }
+      });
+    }
+
+    async function initSpeech() {
+      const voices = await loadVoices();
+      selectedVoice = voices.find(v => v.lang.startsWith('en')) || voices[0];
+      console.log("Voice loaded:", selectedVoice.name);
+    }
 
     btn.onclick = async () => {
       btn.disabled = true;
+      await initSpeech();
       statusText.textContent = "Loading model...";
       model = await cocoSsd.load();
       statusText.textContent = "Model loaded. Starting camera...";
 
-      // Get webcam stream
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      video.srcObject = stream;
-      video.hidden = false;
-
-      video.onloadeddata = () => {
-        statusText.textContent = "Detecting objects...";
-        detectFrame();
+      // Get back camera if possible
+      const constraints = {
+        video: {
+          facingMode: { exact: "environment" }
+        }
       };
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = stream;
+        video.hidden = false;
+
+        video.onloadeddata = () => {
+          statusText.textContent = "Detecting objects...";
+          detectFrame();
+        };
+      } catch (err) {
+        alert("Failed to access camera: " + err.message);
+      }
     };
 
     async function detectFrame() {
@@ -73,7 +105,6 @@
 
       if (predictions.length > 0) {
         const label = predictions[0].class;
-
         statusText.textContent = `Detected: ${label}`;
 
         if (label !== lastSpoken && !speaking) {
@@ -88,17 +119,25 @@
     }
 
     function speak(text) {
-      speaking = true;
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = "en-US";
-      utterance.pitch = 1;
-      utterance.rate = 1;
+      if (synth.speaking) {
+        console.warn("Still speaking. Skipping.");
+        return;
+      }
 
-      utterance.onend = () => {
+      speaking = true;
+
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.voice = selectedVoice;
+      utter.lang = selectedVoice.lang || "en-US";
+      utter.pitch = 1;
+      utter.rate = 1;
+
+      utter.onend = () => {
         speaking = false;
       };
 
-      synth.speak(utterance);
+      console.log("Speaking:", text);
+      synth.speak(utter);
     }
   </script>
 </body>
