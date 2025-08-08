@@ -11,22 +11,33 @@
       font-family: Arial, sans-serif;
       text-align: center;
     }
-    video, canvas {
+    video {
       width: 100%;
       max-width: 600px;
       border-radius: 10px;
+      margin-top: 10px;
     }
     #status {
       margin-top: 10px;
       font-size: 20px;
     }
+    #startButton {
+      margin-top: 50px;
+      padding: 12px 24px;
+      font-size: 18px;
+      background-color: #00aa88;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
   <h2>Smart Object Detector with Voice</h2>
-  <video id="webcam" autoplay muted playsinline></video>
-  <canvas id="canvas" hidden></canvas>
-  <p id="status">Loading model...</p>
+  <button id="startButton">Start Detection</button>
+  <video id="webcam" autoplay muted playsinline hidden></video>
+  <p id="status">Click "Start Detection" to begin.</p>
 
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.13.0"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
@@ -37,8 +48,13 @@
 
     const video = document.getElementById('webcam');
     const statusText = document.getElementById('status');
+    const startButton = document.getElementById('startButton');
 
-    async function init() {
+    startButton.addEventListener('click', async () => {
+      startButton.style.display = 'none';
+      video.hidden = false;
+      statusText.innerText = 'Loading model...';
+
       model = await cocoSsd.load();
       statusText.innerText = "Model loaded. Starting camera...";
 
@@ -49,7 +65,7 @@
         statusText.innerText = "Detecting objects...";
         detectFrame();
       });
-    }
+    });
 
     async function detectFrame() {
       const predictions = await model.detect(video);
@@ -58,7 +74,6 @@
         const label = predictions[0].class;
         statusText.innerText = `Detected: ${label}`;
 
-        // Speak only if the object has changed
         if (label !== spokenLabel) {
           speak(label);
           spokenLabel = label;
@@ -74,11 +89,11 @@
       if (!synth.speaking) {
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = 'en-US';
+        utterance.rate = 1;
+        utterance.pitch = 1;
         synth.speak(utterance);
       }
     }
-
-    init();
   </script>
 </body>
 </html>
